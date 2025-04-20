@@ -181,7 +181,7 @@ import os
 
 # Option 2: Actually launch Jupyter Notebook programmatically (Windows)
 if st.button("Launch Jupyter Notebook"):
-    os.system("start jupyter notebook bda.ipynb")
+    os.system("start jupyter notebook Amazon_review.ipynb")
 
 
 # Description Button
