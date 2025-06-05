@@ -7,25 +7,20 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
 import nltk
 import base64
-
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import numpy as np
-from scipy.special import softmax
 
 # Load RoBERTa tokenizer and model
 roberta_tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
 roberta_model = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
 
-
 nltk.download('vader_lexicon')
 sns.set_style('darkgrid')
 
-# --- Load CSV from same folder as app.py ---
+# Load data
 df = pd.read_csv("amazon.csv").head(500)
 
-
-# --- Load Models ---
+# Load models
 @st.cache_resource
 def load_models():
     tokenizer = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-sentiment")
@@ -35,25 +30,18 @@ def load_models():
 tokenizer, roberta_model = load_models()
 vader = SentimentIntensityAnalyzer()
 
-# --- Analysis Functions ---
+# Analysis functions
 def analyze_vader(text):
     return vader.polarity_scores(text)
 
 def analyze_roberta(text):
-    encoded = roberta_tokenizer(
-        text,
-        return_tensors='pt',
-        truncation=True,        # <--- ADD THIS LINE
-        max_length=512          # Optional but ensures cutoff at 512 tokens
-    )
+    encoded = roberta_tokenizer(text, return_tensors='pt', truncation=True, max_length=512)
     with torch.no_grad():
         output = roberta_model(**encoded)
     scores = output.logits[0].numpy()
     scores = softmax(scores)
     labels = ['roberta_neg', 'roberta_neu', 'roberta_pos']
     return dict(zip(labels, scores))
-
-  
 
 def get_roberta_label(scores):
     return max(scores, key=scores.get).replace("roberta_", "")
@@ -65,40 +53,37 @@ def get_vader_label(score):
 def sentiment_label(vader_sent, roberta_sent):
     return 'Agree' if vader_sent == roberta_sent else 'Disagree'
 
-# --- Streamlit UI ---
-st.title("AMAZON SENTIMENT ANALYSIS")
+# UI
+st.title("Amazon_review Sentiment Analysis")
 
-st.subheader("📄 Preview Dataset")
+st.subheader("Dataset Preview")
 st.dataframe(df.head(6))
 
-
-# Download button
 def file_download(df):
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="amazon_reviews.csv">📥 Download the dataset</a>'
+    href = f'<a href="data:file/csv;base64,{b64}" download="amazon_reviews.csv">Download Dataset</a>'
     return href
 
 st.markdown(file_download(df), unsafe_allow_html=True)
 
-# Tool selection
-st.subheader("🧰 Select the tool for analysis")
+st.subheader("Select Sentiment Analysis Model")
 col1, col2, col3 = st.columns(3)
 
 selected_tool = st.session_state.get("tool", None)
 
-if col1.button("🔹 VADER"):
+if col1.button("VADER"):
     st.session_state["tool"] = "VADER"
     selected_tool = "VADER"
-if col2.button("🔸 ROBERTA"):
+if col2.button("RoBERTa"):
     st.session_state["tool"] = "ROBERTA"
     selected_tool = "ROBERTA"
 
 if selected_tool:
-    st.markdown(f"### Running {selected_tool} Analysis...")
+    st.markdown(f"Selected Model: {selected_tool}")
     results = []
 
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         text = str(row['reviewText'])
         overall = row['overall']
         vader_score = analyze_vader(text)
@@ -122,9 +107,8 @@ if selected_tool:
 
     final_df = pd.DataFrame(results)
 
-    # Visuals
     if selected_tool == "VADER":
-        st.subheader("📊 VADER Sentiment Analysis")
+        st.subheader("VADER Sentiment Analysis")
         fig, ax = plt.subplots()
         sns.barplot(data=final_df, x='overall', y='vader_compound', ax=ax)
         ax.set_title("VADER Compound Score by Star Rating")
@@ -140,7 +124,7 @@ if selected_tool:
         st.pyplot(fig)
 
     elif selected_tool == "ROBERTA":
-        st.subheader("📊 ROBERTA Sentiment Analysis")
+        st.subheader("RoBERTa Sentiment Analysis")
         fig, ax = plt.subplots()
         sns.barplot(data=final_df, x='overall', y='roberta_pos', ax=ax)
         ax.set_title("RoBERTa Positive Score by Star Rating")
@@ -155,141 +139,50 @@ if selected_tool:
         axs[2].set_title('RoBERTa Negative')
         st.pyplot(fig)
 
-    # Store results in session state for comparison
     st.session_state["results_df"] = final_df
 
-# Comparison Button
 if st.session_state.get("results_df") is not None:
-    if col3.button("Comparison"):
-        st.subheader("Agreement Between VADER & RoBERTa")
+    if col3.button("Compare Models"):
+        st.subheader("Model Agreement Comparison")
         df_comp = st.session_state["results_df"]
         fig, ax = plt.subplots()
         sns.countplot(data=df_comp, x='overall', hue='agreement', ax=ax)
-        ax.set_title("VADER vs RoBERTa Sentiment Agreement")
+        ax.set_title("Sentiment Agreement by Rating")
         st.pyplot(fig)
 
-        st.subheader("🔍 Sample Comparison Results")
+        st.subheader("Sample Agreement Results")
         st.dataframe(df_comp[['overall', 'vader_sent', 'roberta_sent', 'agreement']].head(10))
 
+# Updated GitHub Notebook Link
+st.markdown(
+    "[View the Jupyter Notebook on GitHub](https://github.com/tanujgupta18/Sentiment-Analysis-of-Amazon-Reviews/blob/main/Amazon_review.ipynb)"
+)
 
-# Jupyter Notebook Button
-
-
-
-import os
-
-
-# Option 2: Actually launch Jupyter Notebook programmatically (Windows)
-if st.button("Launch Jupyter Notebook"):
-    os.system("start jupyter notebook Amazon_review.ipynb")
-
-
-# Description Button
-if st.button("📘 Project Description"):
+# Description
+if st.button("Project Description"):
     st.markdown("""
-    ###  PROJECT OVERVIEW: Amazon Sentiment Analysis
-    
- OBJECTIVE:
-To perform and compare sentiment analysis on Amazon product reviews using:
+### Project Overview: Amazon Sentiment Analysis
 
-      1)VADER (a rule-based sentiment analyzer)
+**Objective**  
+To analyze sentiment in Amazon product reviews using two techniques:
+- VADER (lexicon-based)
+- RoBERTa (transformer-based)
 
-      2)RoBERTa (a transformer-based deep learning model)
+**Dataset**  
+- Source: amazon.csv  
+- Size: 500 reviews  
+- Fields: reviewText, overall
 
-📦 DATASET USED
-Source: amazon.csv (Amazon product reviews)
+**Steps**  
+1. Load and preprocess review data  
+2. Analyze sentiment using VADER and RoBERTa  
+3. Visualize sentiment distribution by star rating  
+4. Compare agreement between models  
+5. Provide results in an interactive interface using Streamlit
 
-Sample Size: 500 reviews (for fast testing and visualization)
-
-Columns: reviewText, overall (star rating from 1 to 5)
-
-🧰 LIBRARIES & TOOLS USED
-Natural Language Toolkit (NLTK): Tokenization, POS tagging, Named Entity Recognition, VADER Sentiment
-
-Transformers (Hugging Face): RoBERTa model loading and inference
-
-Scikit-learn, Seaborn, Matplotlib: Visualization
-
-Pandas, NumPy, tqdm: Data processing and looping
-
-Streamlit: Web UI for live sentiment testing
-
-STEPS PERFORMED:
-1. Data Preprocessing
-Loaded Amazon review dataset
-
-Took top 500 entries
-
-Displayed distribution of reviews across star ratings
-
-2. Text Analysis and Tokenization
-Tokenized a sample review using TreebankWordTokenizer
-
-POS tagging using nltk.pos_tag
-
-Named Entity Recognition using nltk.ne_chunk
-
-3. Sentiment Analysis - VADER
-Used SentimentIntensityAnalyzer to compute:
-
-pos, neu, neg, and compound scores for each review
-
-Merged sentiment results with original dataset
-
-Visualized compound scores across star ratings
-
-4. Sentiment Analysis - RoBERTa
-Loaded cardiffnlp/twitter-roberta-base-sentiment
-
-Tokenized and processed each review using RoBERTa
-
-Applied softmax() to get probabilities for:
-
-roberta_neg, roberta_neu, roberta_pos
-
-Merged with VADER results
-
-5. Visualization
-Compared VADER vs RoBERTa sentiment scores per star rating
-
-Used sns.pairplot() to visually inspect sentiment distribution
-
-Highlighted mismatches, e.g., 5-star reviews with high negative sentiment
-
-6. Agreement Analysis
-Mapped both models' scores to sentiment labels (pos, neu, neg)
-
-Created agreement column to show whether both models agree
-
-Counted agreement/disagreement per star rating
-
-Visualized with countplot
-
-7. Most Surprising Reviews
-Identified:
-
-Most positive 1-star review
-
-Most negative 5-star review
-
-Displayed unexpected polarity mismatches
-
-8. Live Sentiment Web App (Streamlit)
-User enters custom text
-
-App returns:
-
-VADER and RoBERTa sentiment scores
-
-Overall sentiment interpretation
-
-Option to run this notebook directly or open it via a button
-
-OUTCOMES:
-Built a robust pipeline comparing traditional vs transformer-based sentiment analysis
-
-Observed interesting mismatches between star ratings and inferred sentiment
-
-Enabled real-time sentiment analysis using a friendly web interface
-
+**Technologies**  
+- NLTK for VADER  
+- Hugging Face Transformers for RoBERTa  
+- Matplotlib and Seaborn for visualization  
+- Streamlit for web interface
 """)
